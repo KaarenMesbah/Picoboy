@@ -56,7 +56,12 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(ui_system_pico ui_system_pico.c)
+add_executable(ui_system_pico
+    main.c
+    ui/lcd.c
+    ui/ui.c
+    asset/fonts.c
+)
 
 # Quiet build option: set -DQUIET_COMPILER=ON to silence compiler warnings
 # This is target-scoped and reversible; preferred over forcing -w globally.
@@ -82,6 +87,8 @@ target_link_libraries(ui_system_pico
 # Add the standard include files to the build
 target_include_directories(ui_system_pico PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
+    ${CMAKE_CURRENT_LIST_DIR}/ui
+    ${CMAKE_CURRENT_LIST_DIR}/asset
 )
 
 # Add any user requested libraries
@@ -92,4 +99,3 @@ target_link_libraries(ui_system_pico
 )
 
 pico_add_extra_outputs(ui_system_pico)
-
