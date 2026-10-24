@@ -19,4 +19,6 @@
 
 #define FONT_SCALE 3
 
+#define GAME_DIR "/games"
+
 #endif

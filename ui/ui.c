@@ -1,28 +1,89 @@
 #include "ui.h"
 
-#include <stdio.h>
 #include <string.h>
 
-#include "pico/bootrom.h"
 #include "pico/stdlib.h"
 
 #include "fonts.h"
 #include "hardware_config.h"
 #include "lcd.h"
 
+#define BUTTON_DEBOUNCE_US 25000
+
+static const uint button_pins[BUTTON_COUNT] = {
+    BTN_A,
+    BTN_B,
+    BTN_BOOTSEL,
+};
+
+static bool button_candidate[BUTTON_COUNT];
+static bool button_stable[BUTTON_COUNT];
+static uint64_t button_candidate_since_us[BUTTON_COUNT];
+static uint8_t button_pressed_events;
+static uint8_t button_released_events;
+
 void button_init(void)
 {
-    gpio_init(BTN_BOOTSEL);
-    gpio_set_dir(BTN_BOOTSEL, GPIO_IN);
-    gpio_pull_up(BTN_BOOTSEL);
+    uint64_t now = time_us_64();
 
-    gpio_init(BTN_A);
-    gpio_set_dir(BTN_A, GPIO_IN);
-    gpio_pull_up(BTN_A);
+    for (unsigned int i = 0; i < BUTTON_COUNT; ++i)
+    {
+        gpio_init(button_pins[i]);
+        gpio_set_dir(button_pins[i], GPIO_IN);
+        gpio_pull_up(button_pins[i]);
 
-    gpio_init(BTN_B);
-    gpio_set_dir(BTN_B, GPIO_IN);
-    gpio_pull_up(BTN_B);
+        // Initialize from the actual pin state to avoid a false event at startup.
+        button_candidate[i] = gpio_get(button_pins[i]) == 0;
+        button_stable[i] = button_candidate[i];
+        button_candidate_since_us[i] = now;
+    }
+
+    button_pressed_events = 0;
+    button_released_events = 0;
+}
+
+void button_update(void)
+{
+    uint64_t now = time_us_64();
+    button_pressed_events = 0;
+    button_released_events = 0;
+
+    for (unsigned int i = 0; i < BUTTON_COUNT; ++i)
+    {
+        bool raw_pressed = gpio_get(button_pins[i]) == 0;
+
+        if (raw_pressed != button_candidate[i])
+        {
+            button_candidate[i] = raw_pressed;
+            button_candidate_since_us[i] = now;
+        }
+        else if (button_candidate[i] != button_stable[i] &&
+                 now - button_candidate_since_us[i] >= BUTTON_DEBOUNCE_US)
+        {
+            button_stable[i] = button_candidate[i];
+            if (button_stable[i])
+                button_pressed_events |= (uint8_t)(1u << i);
+            else
+                button_released_events |= (uint8_t)(1u << i);
+        }
+    }
+}
+
+bool button_was_pressed(Button button)
+{
+    return (unsigned int)button < BUTTON_COUNT &&
+           (button_pressed_events & (uint8_t)(1u << button)) != 0;
+}
+
+bool button_was_released(Button button)
+{
+    return (unsigned int)button < BUTTON_COUNT &&
+           (button_released_events & (uint8_t)(1u << button)) != 0;
+}
+
+bool button_is_down(Button button)
+{
+    return (unsigned int)button < BUTTON_COUNT && button_stable[button];
 }
 
 void draw_char(char c, uint16_t x, uint16_t y, uint8_t r, uint8_t g, uint8_t b,
@@ -94,42 +155,6 @@ void draw_string(char *str, uint16_t x, uint16_t y, uint8_t r, uint8_t g, uint8_
     {
         draw_char(str[i], x + xx, y + space * i, r, g, b, scale, br, bg, bb);
     }
-}
-
-void button_test(int *scroll, int scrollable_items)
-{
-    if (gpio_get(BTN_A) == 0) // Active low
-    {
-        printf("BTN_A pressed!\n");
-        if (*scroll >= 1)
-        {
-            *scroll = *scroll + 1;
-        }
-        if (*scroll > scrollable_items)
-        {
-            *scroll = 1;
-        }
-        sleep_ms(200); // Debounce delay
-    }
-    if (gpio_get(BTN_B) == 0) // Active low
-    {
-        if (*scroll > 1)
-        {
-            *scroll = *scroll - 1;
-        }
-        else if (*scroll <= 1)
-        {
-            *scroll = scrollable_items;
-        }
-
-        printf("BTN_B pressed!\n");
-        sleep_ms(200); // Debounce delay
-    }
-    if (gpio_get(BTN_BOOTSEL) == 0)
-    {
-        reset_usb_boot(0, 0);
-    }
-    sleep_ms(50); // Polling delay
 }
 
 void draw_menu(int selected, char items[][20], int item_count, int *previous)
