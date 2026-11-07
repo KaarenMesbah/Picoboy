@@ -115,10 +115,13 @@ bool button_is_down(Button button)
     return (unsigned int)button < BUTTON_COUNT && button_stable[button];
 }
 
-void draw_char(char c, uint16_t x, uint16_t y, uint8_t r, uint8_t g, uint8_t b,
-               uint8_t scale, uint8_t br, uint8_t bg, uint8_t bb)
+static void draw_char_clipped(char c, uint16_t x, uint16_t y,
+                              uint16_t clip_x, uint16_t clip_y,
+                              uint16_t clip_width, uint16_t clip_height,
+                              uint8_t r, uint8_t g, uint8_t b, uint8_t scale,
+                              uint8_t br, uint8_t bg, uint8_t bb)
 {
-    if (scale == 0 || scale > FONT_SCALE)
+    if (scale == 0 || scale > FONT_SCALE || clip_width == 0 || clip_height == 0)
         return;
 
     // The font table covers printable ASCII plus DEL; use '?' for other bytes.
@@ -173,12 +176,45 @@ void draw_char(char c, uint16_t x, uint16_t y, uint8_t r, uint8_t g, uint8_t b,
         }
     }
 
-    lcd_set_window(x, y, x + rw - 1, y + rh - 1);
-    lcd_write(buf, rw * rh * 2);
+    uint32_t left = x > clip_x ? x : clip_x;
+    uint32_t top = y > clip_y ? y : clip_y;
+    uint32_t right = x + rw;
+    uint32_t bottom = y + rh;
+    uint32_t clip_right = (uint32_t)clip_x + clip_width;
+    uint32_t clip_bottom = (uint32_t)clip_y + clip_height;
+    if (right > clip_right)
+        right = clip_right;
+    if (bottom > clip_bottom)
+        bottom = clip_bottom;
+    if (right > SCREEN_WIDTH)
+        right = SCREEN_WIDTH;
+    if (bottom > SCREEN_HEIGHT)
+        bottom = SCREEN_HEIGHT;
+
+    if (left >= right || top >= bottom)
+        return;
+
+    uint16_t draw_width = right - left;
+    uint16_t draw_height = bottom - top;
+    uint16_t source_x = left - x;
+    uint16_t source_y = top - y;
+    lcd_set_window(left, top, right - 1, bottom - 1);
+    for (uint16_t row = 0; row < draw_height; ++row)
+        lcd_write(&buf[((source_y + row) * rw + source_x) * 2], draw_width * 2);
 }
 
-void draw_string(const char *str, uint16_t x, uint16_t y, uint8_t r, uint8_t g, uint8_t b,
-                 uint8_t scale, uint8_t br, uint8_t bg, uint8_t bb)
+void draw_char(char c, uint16_t x, uint16_t y, uint8_t r, uint8_t g, uint8_t b,
+               uint8_t scale, uint8_t br, uint8_t bg, uint8_t bb)
+{
+    draw_char_clipped(c, x, y, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT,
+                      r, g, b, scale, br, bg, bb);
+}
+
+void draw_string_clipped(const char *str, uint16_t x, uint16_t y,
+                         uint16_t clip_x, uint16_t clip_y,
+                         uint16_t clip_width, uint16_t clip_height,
+                         uint8_t r, uint8_t g, uint8_t b, uint8_t scale,
+                         uint8_t br, uint8_t bg, uint8_t bb)
 {
     if (scale == 0 || scale > FONT_SCALE)
         return;
@@ -189,8 +225,17 @@ void draw_string(const char *str, uint16_t x, uint16_t y, uint8_t r, uint8_t g, 
 
     for (size_t i = 0; i < length; i++)
     {
-        draw_char(str[i], x + xx, y + space * i, r, g, b, scale, br, bg, bb);
+        draw_char_clipped(str[i], x + xx, y + space * i,
+                          clip_x, clip_y, clip_width, clip_height,
+                          r, g, b, scale, br, bg, bb);
     }
+}
+
+void draw_string(const char *str, uint16_t x, uint16_t y, uint8_t r, uint8_t g, uint8_t b,
+                 uint8_t scale, uint8_t br, uint8_t bg, uint8_t bb)
+{
+    draw_string_clipped(str, x, y, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT,
+                        r, g, b, scale, br, bg, bb);
 }
 
 void draw_menu(int selected, const MenuOption items[], int item_count, int *previous)

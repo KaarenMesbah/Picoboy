@@ -8,15 +8,66 @@
 
 #define SUBMENU_FONT_SCALE (FONT_SCALE - 1)
 #define GAME_EXIT_HOLD_US 1000000
+#define GAME_WIPE_TILE_SIZE 20
 
 extern const Game hello_game;
 
 static const Game *active_game;
 
+static void draw_game_transition_pass(bool render_game)
+{
+    const int columns = (SCREEN_WIDTH + GAME_WIPE_TILE_SIZE - 1) / GAME_WIPE_TILE_SIZE;
+    const int rows = (SCREEN_HEIGHT + GAME_WIPE_TILE_SIZE - 1) / GAME_WIPE_TILE_SIZE;
+    const int max_wave = rows > columns ? rows - 1 : columns - 1;
+
+    for (int wave = 0; wave <= max_wave; ++wave)
+    {
+        for (int row = 0; row < rows; ++row)
+        {
+            for (int column = 0; column < columns; ++column)
+            {
+                int dx = column * 2 + 1 - columns;
+                int dy = row * 2 + 1 - rows;
+                if (dx < 0)
+                    dx = -dx;
+                if (dy < 0)
+                    dy = -dy;
+
+                int distance = dx > dy ? dx : dy;
+                if (distance == wave)
+                {
+                    uint16_t x = column * GAME_WIPE_TILE_SIZE;
+                    uint16_t y = row * GAME_WIPE_TILE_SIZE;
+                    uint16_t width = SCREEN_WIDTH - x;
+                    uint16_t height = SCREEN_HEIGHT - y;
+                    if (width > GAME_WIPE_TILE_SIZE)
+                        width = GAME_WIPE_TILE_SIZE;
+                    if (height > GAME_WIPE_TILE_SIZE)
+                        height = GAME_WIPE_TILE_SIZE;
+
+                    if (render_game)
+                        active_game->draw_region(x, y, width, height);
+                    else
+                        fill_rect_rgb565(x, y, width, height, 255, 255, 255);
+                }
+            }
+        }
+
+        sleep_ms(20);
+    }
+}
+
+static void play_game_launch_wipe(void)
+{
+    draw_game_transition_pass(false);
+    draw_game_transition_pass(true);
+}
+
 static void launch_hello_game(void)
 {
     active_game = &hello_game;
     active_game->start();
+    play_game_launch_wipe();
 }
 
 static const MenuOption game_options[] = {
