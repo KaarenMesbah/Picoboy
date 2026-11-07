@@ -14,6 +14,7 @@ static const uint button_pins[BUTTON_COUNT] = {
     BTN_A,
     BTN_B,
     BTN_BOOTSEL,
+    BTN_START,
 };
 
 static bool button_candidate[BUTTON_COUNT];
@@ -145,7 +146,7 @@ void draw_char(char c, uint16_t x, uint16_t y, uint8_t r, uint8_t g, uint8_t b,
     lcd_write(buf, rw * rh * 2);
 }
 
-void draw_string(char *str, uint16_t x, uint16_t y, uint8_t r, uint8_t g, uint8_t b,
+void draw_string(const char *str, uint16_t x, uint16_t y, uint8_t r, uint8_t g, uint8_t b,
                  uint8_t scale, uint8_t br, uint8_t bg, uint8_t bb)
 {
     int space = FONT_SCALE * 7;
@@ -162,9 +163,9 @@ void draw_menu(int selected, char items[][20], int item_count, int *previous)
     static int initialized = 0;
     int space = FONT_SCALE * 12;
 
-    if (!initialized)
+    if (!initialized || *previous < 1 || *previous > item_count)
     {
-        // Draw all columns once; later updates only repaint the old/new selection.
+        // Redraw every column initially and after returning from a submenu.
         initialized = 1;
         for (int i = 1; i <= item_count; i++)
         {

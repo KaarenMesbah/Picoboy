@@ -13,6 +13,7 @@
 #define BTN_BOOTSEL 7
 #define BTN_A 8
 #define BTN_B 9
+#define BTN_START 0
 
 #define SCREEN_WIDTH 320
 #define SCREEN_HEIGHT 480
