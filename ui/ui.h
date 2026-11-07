@@ -39,5 +39,7 @@ void draw_string_clipped(const char *str, uint16_t x, uint16_t y,
 void draw_string(const char *str, uint16_t x, uint16_t y, uint8_t r, uint8_t g, uint8_t b,
                  uint8_t scale, uint8_t br, uint8_t bg, uint8_t bb);
 void draw_menu(int selected, const MenuOption items[], int item_count, int *previous);
+void draw_menu_at(int selected, const MenuOption items[], int item_count, int *previous,
+                  uint16_t x_offset);
 
 #endif

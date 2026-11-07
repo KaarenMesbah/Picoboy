@@ -9,6 +9,7 @@
 #define SUBMENU_FONT_SCALE (FONT_SCALE - 1)
 #define GAME_EXIT_HOLD_US 1000000
 #define GAME_WIPE_TILE_SIZE 20
+#define GAME_MENU_X_OFFSET 48
 
 extern const Game hello_game;
 
@@ -94,10 +95,13 @@ static void draw_games_menu(int selected_game, int *previous_game, bool redraw)
     if (redraw)
     {
         lcd_clear(0, 0, 0);
+        draw_string("GAMES", 20, 5, 255, 255, 255,
+                    SUBMENU_FONT_SCALE, 0, 0, 0);
         *previous_game = 0;
     }
 
-    draw_menu(selected_game + 1, game_options, get_game_option_count(), previous_game);
+    draw_menu_at(selected_game + 1, game_options, get_game_option_count(),
+                 previous_game, GAME_MENU_X_OFFSET);
     *previous_game = selected_game + 1;
 }
 

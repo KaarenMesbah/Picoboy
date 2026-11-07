@@ -238,7 +238,8 @@ void draw_string(const char *str, uint16_t x, uint16_t y, uint8_t r, uint8_t g, 
                         r, g, b, scale, br, bg, bb);
 }
 
-void draw_menu(int selected, const MenuOption items[], int item_count, int *previous)
+void draw_menu_at(int selected, const MenuOption items[], int item_count, int *previous,
+                  uint16_t x_offset)
 {
     static int initialized = 0;
     int space = FONT_SCALE * 12;
@@ -251,30 +252,35 @@ void draw_menu(int selected, const MenuOption items[], int item_count, int *prev
         {
             if (i == selected)
             {
-                fill_rect_rgb565(space * (i - 1), 0, (FONT_SCALE + 2) * 7,
+                fill_rect_rgb565(x_offset + space * (i - 1), 0, (FONT_SCALE + 2) * 7,
                                  SCREEN_HEIGHT, 0xff, 0xff, 0xff);
-                draw_string(items[i - 1].label, space * (i - 1), 5, 0, 0, 0,
+                draw_string(items[i - 1].label, x_offset + space * (i - 1), 5, 0, 0, 0,
                             FONT_SCALE, 255, 255, 255);
             }
             else
             {
-                fill_rect_rgb565(space * (i - 1), 0, (FONT_SCALE + 2) * 7,
+                fill_rect_rgb565(x_offset + space * (i - 1), 0, (FONT_SCALE + 2) * 7,
                                  SCREEN_HEIGHT, 0, 0, 0);
-                draw_string(items[i - 1].label, space * (i - 1), 5, 255, 255, 255,
+                draw_string(items[i - 1].label, x_offset + space * (i - 1), 5, 255, 255, 255,
                             FONT_SCALE, 0, 0, 0);
             }
         }
     }
     else if (*previous != selected)
     {
-        fill_rect_rgb565(space * (*previous - 1), 0, (FONT_SCALE + 2) * 7,
+        fill_rect_rgb565(x_offset + space * (*previous - 1), 0, (FONT_SCALE + 2) * 7,
                          SCREEN_HEIGHT, 0, 0, 0);
-        draw_string(items[*previous - 1].label, space * (*previous - 1), 5, 255, 255, 255,
+        draw_string(items[*previous - 1].label, x_offset + space * (*previous - 1), 5, 255, 255, 255,
                     FONT_SCALE, 0, 0, 0);
 
-        fill_rect_rgb565(space * (selected - 1), 0, (FONT_SCALE + 2) * 7,
+        fill_rect_rgb565(x_offset + space * (selected - 1), 0, (FONT_SCALE + 2) * 7,
                          SCREEN_HEIGHT, 0xff, 0xff, 0xff);
-        draw_string(items[selected - 1].label, space * (selected - 1), 5, 0, 0, 0,
+        draw_string(items[selected - 1].label, x_offset + space * (selected - 1), 5, 0, 0, 0,
                     FONT_SCALE, 255, 255, 255);
     }
+}
+
+void draw_menu(int selected, const MenuOption items[], int item_count, int *previous)
+{
+    draw_menu_at(selected, items, item_count, previous, 0);
 }
