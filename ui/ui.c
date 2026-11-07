@@ -9,6 +9,7 @@
 #include "lcd.h"
 
 #define BUTTON_DEBOUNCE_US 25000
+#define BUTTON_HOLD_US 500000
 
 static const uint button_pins[BUTTON_COUNT] = {
     BTN_A,
@@ -19,9 +20,12 @@ static const uint button_pins[BUTTON_COUNT] = {
 
 static bool button_candidate[BUTTON_COUNT];
 static bool button_stable[BUTTON_COUNT];
+static bool button_hold_reported[BUTTON_COUNT];
 static uint64_t button_candidate_since_us[BUTTON_COUNT];
+static uint64_t button_pressed_since_us[BUTTON_COUNT];
 static uint8_t button_pressed_events;
 static uint8_t button_released_events;
+static uint8_t button_held_events;
 
 void button_init(void)
 {
@@ -36,11 +40,14 @@ void button_init(void)
         // Initialize from the actual pin state to avoid a false event at startup.
         button_candidate[i] = gpio_get(button_pins[i]) == 0;
         button_stable[i] = button_candidate[i];
+        button_hold_reported[i] = false;
         button_candidate_since_us[i] = now;
+        button_pressed_since_us[i] = now;
     }
 
     button_pressed_events = 0;
     button_released_events = 0;
+    button_held_events = 0;
 }
 
 void button_update(void)
@@ -48,6 +55,7 @@ void button_update(void)
     uint64_t now = time_us_64();
     button_pressed_events = 0;
     button_released_events = 0;
+    button_held_events = 0;
 
     for (unsigned int i = 0; i < BUTTON_COUNT; ++i)
     {
@@ -63,9 +71,23 @@ void button_update(void)
         {
             button_stable[i] = button_candidate[i];
             if (button_stable[i])
+            {
                 button_pressed_events |= (uint8_t)(1u << i);
+                button_pressed_since_us[i] = now;
+                button_hold_reported[i] = false;
+            }
             else
+            {
                 button_released_events |= (uint8_t)(1u << i);
+                button_hold_reported[i] = false;
+            }
+        }
+
+        if (button_stable[i] && !button_hold_reported[i] &&
+            now - button_pressed_since_us[i] >= BUTTON_HOLD_US)
+        {
+            button_held_events |= (uint8_t)(1u << i);
+            button_hold_reported[i] = true;
         }
     }
 }
@@ -82,6 +104,12 @@ bool button_was_released(Button button)
            (button_released_events & (uint8_t)(1u << button)) != 0;
 }
 
+bool button_was_held(Button button)
+{
+    return (unsigned int)button < BUTTON_COUNT &&
+           (button_held_events & (uint8_t)(1u << button)) != 0;
+}
+
 bool button_is_down(Button button)
 {
     return (unsigned int)button < BUTTON_COUNT && button_stable[button];
@@ -90,6 +118,9 @@ bool button_is_down(Button button)
 void draw_char(char c, uint16_t x, uint16_t y, uint8_t r, uint8_t g, uint8_t b,
                uint8_t scale, uint8_t br, uint8_t bg, uint8_t bb)
 {
+    if (scale == 0 || scale > FONT_SCALE)
+        return;
+
     // The font table covers printable ASCII plus DEL; use '?' for other bytes.
     if (c < 32 || c > 127)
         c = '?';
@@ -149,16 +180,20 @@ void draw_char(char c, uint16_t x, uint16_t y, uint8_t r, uint8_t g, uint8_t b,
 void draw_string(const char *str, uint16_t x, uint16_t y, uint8_t r, uint8_t g, uint8_t b,
                  uint8_t scale, uint8_t br, uint8_t bg, uint8_t bb)
 {
-    int space = FONT_SCALE * 7;
-    int xx = (((FONT_SCALE + 2) * 7) / 2) - (space / 2);
+    if (scale == 0 || scale > FONT_SCALE)
+        return;
 
-    for (int i = 0; i <= strlen(str) - 1; i++)
+    int space = scale * 7;
+    int xx = (((scale + 2) * 7) / 2) - (space / 2);
+    size_t length = strlen(str);
+
+    for (size_t i = 0; i < length; i++)
     {
         draw_char(str[i], x + xx, y + space * i, r, g, b, scale, br, bg, bb);
     }
 }
 
-void draw_menu(int selected, char items[][20], int item_count, int *previous)
+void draw_menu(int selected, const MenuOption items[], int item_count, int *previous)
 {
     static int initialized = 0;
     int space = FONT_SCALE * 12;
@@ -173,14 +208,14 @@ void draw_menu(int selected, char items[][20], int item_count, int *previous)
             {
                 fill_rect_rgb565(space * (i - 1), 0, (FONT_SCALE + 2) * 7,
                                  SCREEN_HEIGHT, 0xff, 0xff, 0xff);
-                draw_string(items[i - 1], space * (i - 1), 5, 0, 0, 0,
+                draw_string(items[i - 1].label, space * (i - 1), 5, 0, 0, 0,
                             FONT_SCALE, 255, 255, 255);
             }
             else
             {
                 fill_rect_rgb565(space * (i - 1), 0, (FONT_SCALE + 2) * 7,
                                  SCREEN_HEIGHT, 0, 0, 0);
-                draw_string(items[i - 1], space * (i - 1), 5, 255, 255, 255,
+                draw_string(items[i - 1].label, space * (i - 1), 5, 255, 255, 255,
                             FONT_SCALE, 0, 0, 0);
             }
         }
@@ -189,12 +224,12 @@ void draw_menu(int selected, char items[][20], int item_count, int *previous)
     {
         fill_rect_rgb565(space * (*previous - 1), 0, (FONT_SCALE + 2) * 7,
                          SCREEN_HEIGHT, 0, 0, 0);
-        draw_string(items[*previous - 1], space * (*previous - 1), 5, 255, 255, 255,
+        draw_string(items[*previous - 1].label, space * (*previous - 1), 5, 255, 255, 255,
                     FONT_SCALE, 0, 0, 0);
 
         fill_rect_rgb565(space * (selected - 1), 0, (FONT_SCALE + 2) * 7,
                          SCREEN_HEIGHT, 0xff, 0xff, 0xff);
-        draw_string(items[selected - 1], space * (selected - 1), 5, 0, 0, 0,
+        draw_string(items[selected - 1].label, space * (selected - 1), 5, 0, 0, 0,
                     FONT_SCALE, 255, 255, 255);
     }
 }

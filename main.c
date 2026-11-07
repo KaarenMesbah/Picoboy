@@ -2,31 +2,76 @@
 #include "pico/bootrom.h"
 
 #include "hardware_config.h"
+#include "games/game.h"
 #include "lcd.h"
 #include "ui.h"
 
-static void draw_submenu(char *title, char *message)
+#define SUBMENU_FONT_SCALE (FONT_SCALE - 1)
+#define GAME_EXIT_HOLD_US 1000000
+
+extern const Game hello_game;
+
+static const Game *active_game;
+
+static void launch_hello_game(void)
 {
-    lcd_clear(0, 0, 0);
-    draw_string(title, 20, 5, 255, 255, 255, FONT_SCALE, 0, 0, 0);
-    draw_string(message, 60, 5, 255, 255, 255, FONT_SCALE, 0, 0, 0);
+    active_game = &hello_game;
+    active_game->start();
 }
 
-static void open_selected_menu(int selected_item)
+static const MenuOption game_options[] = {
+    {"Hello", launch_hello_game},
+    {NULL, NULL},
+};
+
+static const MenuOption menu_items[] = {
+    {"Version", NULL},
+    {"Games", NULL},
+    {"About", NULL},
+};
+
+static int get_game_option_count(void)
+{
+    int count = 0;
+    while (game_options[count].label != NULL)
+        ++count;
+    return count;
+}
+
+static void draw_games_menu(int selected_game, int *previous_game, bool redraw)
+{
+    if (redraw)
+    {
+        lcd_clear(0, 0, 0);
+        *previous_game = 0;
+    }
+
+    draw_menu(selected_game + 1, game_options, get_game_option_count(), previous_game);
+    *previous_game = selected_game + 1;
+}
+
+static void draw_submenu(const char *title, const char *message, uint8_t scale)
+{
+    lcd_clear(0, 0, 0);
+    draw_string(title, 20, 5, 255, 255, 255, scale, 0, 0, 0);
+    draw_string(message, 60, 5, 255, 255, 255, scale, 0, 0, 0);
+}
+
+static bool open_selected_menu(int selected_item, int selected_game, int *previous_game)
 {
     switch (selected_item)
     {
     case 1:
-        draw_submenu("VERSION", "PicoBoy 0.1");
-        break;
+        draw_submenu("VERSION", "PicoBoy 0.1", SUBMENU_FONT_SCALE);
+        return false;
     case 2:
-        draw_submenu("GAMES", "No games yet");
-        break;
+        draw_games_menu(selected_game, previous_game, true);
+        return true;
     case 3:
-        draw_submenu("ABOUT", "A pico game handheld by Kaaren");
-        break;
+        draw_submenu("ABOUT", "A pico game handheld by Kaaren", SUBMENU_FONT_SCALE);
+        return false;
     default:
-        return;
+        return false;
     }
 }
 
@@ -34,8 +79,12 @@ int main(void)
 {
     int selected_item = 1;
     int previous_item = 1;
-    char menu_items[][20] = {"Version", "Games", "About"};
+    int selected_game = 0;
+    int previous_game = 0;
+    uint64_t exit_combo_started_us = 0;
+    bool exit_combo_active = false;
     bool submenu_open = false;
+    bool game_menu_open = false;
 
     stdio_init_all();
     lcd_spi_init();
@@ -52,18 +101,59 @@ int main(void)
         if (button_was_pressed(BUTTON_BOOTSEL))
             reset_usb_boot(0, 0);
 
-        if (submenu_open)
+        if (active_game != NULL)
+        {
+            if (button_is_down(BUTTON_START) && button_is_down(BUTTON_B))
+            {
+                uint64_t now = time_us_64();
+                if (!exit_combo_active)
+                {
+                    exit_combo_started_us = now;
+                    exit_combo_active = true;
+                }
+                else if (now - exit_combo_started_us >= GAME_EXIT_HOLD_US)
+                {
+                    active_game->stop();
+                    active_game = NULL;
+                    exit_combo_active = false;
+                    draw_games_menu(selected_game, &previous_game, true);
+                }
+            }
+            else
+            {
+                exit_combo_active = false;
+            }
+
+            if (active_game != NULL)
+                active_game->update();
+        }
+        else if (submenu_open)
         {
             if (button_was_pressed(BUTTON_B))
             {
                 submenu_open = false;
+                game_menu_open = false;
                 lcd_clear(0, 0, 0);
                 previous_item = 0;
+            }
+            else if (game_menu_open)
+            {
+                int game_count = get_game_option_count();
+                if (game_count > 0 && button_was_pressed(BUTTON_A))
+                {
+                    selected_game = (selected_game + 1) % game_count;
+                    draw_games_menu(selected_game, &previous_game, false);
+                }
+                if (game_count > 0 && button_was_pressed(BUTTON_START) &&
+                    game_options[selected_game].on_select != NULL)
+                {
+                    game_options[selected_game].on_select();
+                }
             }
         }
         else if (button_was_pressed(BUTTON_START))
         {
-            open_selected_menu(selected_item);
+            game_menu_open = open_selected_menu(selected_item, selected_game, &previous_game);
             submenu_open = true;
         }
         else
