@@ -2,6 +2,7 @@
 #define UI_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 typedef enum
@@ -29,6 +30,10 @@ bool button_was_released(Button button);
 bool button_was_held(Button button);
 // Returns the debounced held state.
 bool button_is_down(Button button);
+bool text_pixel(const uint8_t font[96][5], uint8_t scale,
+                const char *text, size_t text_length,
+                int32_t x, int32_t y, int32_t pixel_x, int32_t pixel_y,
+                bool rotate_180);
 void draw_char(char c, uint16_t x, uint16_t y, uint8_t r, uint8_t g, uint8_t b,
                uint8_t scale, uint8_t br, uint8_t bg, uint8_t bb);
 void draw_string_clipped(const char *str, uint16_t x, uint16_t y,

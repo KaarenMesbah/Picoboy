@@ -10,10 +10,31 @@
 #define GAME_EXIT_HOLD_US 1000000
 #define GAME_WIPE_TILE_SIZE 20
 #define GAME_MENU_X_OFFSET 48
+#define GAME_FRAME_INTERVAL_US (1000000 / 60)
 
 extern const Game hello_game;
+extern const Game flappy_game;
 
 static const Game *active_game;
+
+static GameInput read_game_input(void)
+{
+    static const Button button_map[GAME_BUTTON_COUNT] = {
+        BUTTON_A,
+        BUTTON_B,
+        BUTTON_START,
+    };
+    GameInput input = {0};
+
+    for (unsigned int i = 0; i < GAME_BUTTON_COUNT; ++i)
+    {
+        input.down[i] = button_is_down(button_map[i]);
+        input.pressed[i] = button_was_pressed(button_map[i]);
+        input.released[i] = button_was_released(button_map[i]);
+    }
+
+    return input;
+}
 
 static void draw_game_transition_pass(bool render_game)
 {
@@ -47,7 +68,7 @@ static void draw_game_transition_pass(bool render_game)
                         height = GAME_WIPE_TILE_SIZE;
 
                     if (render_game)
-                        active_game->draw_region(x, y, width, height);
+                        active_game->draw_region(active_game->state, x, y, width, height);
                     else
                         fill_rect_rgb565(x, y, width, height, 255, 255, 255);
                 }
@@ -67,12 +88,30 @@ static void play_game_launch_wipe(void)
 static void launch_hello_game(void)
 {
     active_game = &hello_game;
-    active_game->start();
+    active_game->start(active_game->state);
     play_game_launch_wipe();
+}
+
+static void launch_flappy_game(void)
+{
+    active_game = &flappy_game;
+    active_game->start(active_game->state);
+    play_game_launch_wipe();
+}
+
+static void stop_active_game(void)
+{
+    if (active_game == NULL)
+        return;
+
+    const Game *game = active_game;
+    active_game = NULL;
+    game->stop(game->state);
 }
 
 static const MenuOption game_options[] = {
     {"Hello", launch_hello_game},
+    {"Flappy", launch_flappy_game},
     {NULL, NULL},
 };
 
@@ -140,6 +179,7 @@ int main(void)
     bool exit_combo_active = false;
     bool submenu_open = false;
     bool game_menu_open = false;
+    uint64_t last_game_frame_us = 0;
 
     stdio_init_all();
     lcd_spi_init();
@@ -158,7 +198,15 @@ int main(void)
 
         if (active_game != NULL)
         {
-            if (button_is_down(BUTTON_START) && button_is_down(BUTTON_B))
+            uint64_t frame_started_us = time_us_64();
+            uint32_t delta_us = 0;
+            if (last_game_frame_us != 0)
+            {
+                uint64_t elapsed_us = frame_started_us - last_game_frame_us;
+                delta_us = elapsed_us > UINT32_MAX ? UINT32_MAX : (uint32_t)elapsed_us;
+            }
+            GameInput input = read_game_input();
+            if (input.down[GAME_BUTTON_START] && input.down[GAME_BUTTON_B])
             {
                 uint64_t now = time_us_64();
                 if (!exit_combo_active)
@@ -168,8 +216,8 @@ int main(void)
                 }
                 else if (now - exit_combo_started_us >= GAME_EXIT_HOLD_US)
                 {
-                    active_game->stop();
-                    active_game = NULL;
+                    stop_active_game();
+                    last_game_frame_us = 0;
                     exit_combo_active = false;
                     draw_games_menu(selected_game, &previous_game, true);
                 }
@@ -180,7 +228,15 @@ int main(void)
             }
 
             if (active_game != NULL)
-                active_game->update();
+            {
+                active_game->update(active_game->state, &input, delta_us);
+                active_game->draw(active_game->state);
+                last_game_frame_us = frame_started_us;
+
+                uint64_t frame_elapsed_us = time_us_64() - frame_started_us;
+                if (frame_elapsed_us < GAME_FRAME_INTERVAL_US)
+                    sleep_us(GAME_FRAME_INTERVAL_US - frame_elapsed_us);
+            }
         }
         else if (submenu_open)
         {

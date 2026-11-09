@@ -62,6 +62,25 @@ void lcd_set_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
     lcd_cmd(0x2C);
 }
 
+void lcd_set_vertical_scroll_area(uint16_t top_fixed, uint16_t scroll_height,
+                                  uint16_t bottom_fixed)
+{
+    lcd_cmd(0x33);
+    lcd_data(top_fixed >> 8);
+    lcd_data(top_fixed & 0xFF);
+    lcd_data(scroll_height >> 8);
+    lcd_data(scroll_height & 0xFF);
+    lcd_data(bottom_fixed >> 8);
+    lcd_data(bottom_fixed & 0xFF);
+}
+
+void lcd_set_vertical_scroll_start(uint16_t start)
+{
+    lcd_cmd(0x37);
+    lcd_data(start >> 8);
+    lcd_data(start & 0xFF);
+}
+
 void lcd_clear(uint8_t r, uint8_t g, uint8_t b)
 {
     lcd_set_window(0, 0, SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1);

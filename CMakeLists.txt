@@ -59,6 +59,7 @@ pico_sdk_init()
 add_executable(ui_system_pico
     main.c
     games/hello_game.c
+    games/flappy_game.c
     ui/lcd.c
     ui/ui.c
     asset/fonts.c

@@ -115,6 +115,40 @@ bool button_is_down(Button button)
     return (unsigned int)button < BUTTON_COUNT && button_stable[button];
 }
 
+bool text_pixel(const uint8_t font[96][5], uint8_t scale,
+                const char *text, size_t text_length,
+                int32_t x, int32_t y, int32_t pixel_x, int32_t pixel_y,
+                bool rotate_180)
+{
+    if (font == NULL || text == NULL || scale == 0 ||
+        pixel_x < x || pixel_y < y)
+        return false;
+
+    int32_t relative_x = pixel_x - x;
+    int32_t relative_y = pixel_y - y;
+    int32_t advance = 7 * scale;
+    size_t position = (size_t)(relative_x / advance);
+    int glyph_column = (relative_x % advance) / scale;
+    int glyph_row = relative_y / scale;
+
+    if (position >= text_length || glyph_column >= 5 || glyph_row >= 7)
+        return false;
+
+    if (rotate_180)
+    {
+        position = text_length - position - 1;
+        glyph_column = 4 - glyph_column;
+        glyph_row = 6 - glyph_row;
+    }
+
+    unsigned char character = (unsigned char)text[position];
+    if (character < 32 || character > 127)
+        character = '?';
+
+    return (font[character - 32][glyph_column] &
+            (1u << (6 - glyph_row))) != 0;
+}
+
 static void draw_char_clipped(char c, uint16_t x, uint16_t y,
                               uint16_t clip_x, uint16_t clip_y,
                               uint16_t clip_width, uint16_t clip_height,
